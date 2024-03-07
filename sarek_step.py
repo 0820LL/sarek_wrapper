@@ -13,7 +13,7 @@ def monitor_feedback(params_d:dict) -> None:
     task_id             = params_d['task_id']
     analysis_record_id  = params_d['analysis_record_id']
     is_mutation         = params_d['is_mutation']
-    is_fusion           = params_d['is_fusion']
+    is_sv               = params_d['is_sv']
     is_cnv              = params_d['is_cnv'],
     pipeline_name       = params_d['pipeline_name']
     os.chdir(analysis_path)
@@ -28,7 +28,13 @@ def monitor_feedback(params_d:dict) -> None:
         'taskName'        : 'Step'
     }
     # send the message of step_0
-    time.sleep(10)
+    detect_num = 0
+    while True:
+        detect_num += 1
+        if os.path.exists('{}/results'.format(analysis_path)) or (detect_num > 5):
+            break
+        else:
+            time.sleep(60)
     step_dict['analysisStatus'] = '流程开始'
     step_file_name = 'step_start.json'
     if call_value == 0 and os.path.exists('{}/work'.format(analysis_path)):
@@ -42,18 +48,19 @@ def monitor_feedback(params_d:dict) -> None:
         exit('sarek startup failed')
     # send the message of step_x
     while True:
-        execution_trace_file = os.getcwd()
-        if 'results' in os.listdir(execution_trace_file):
-            execution_trace_file += '/results'
-            if 'pipeline_info' in os.listdir(execution_trace_file):
-                execution_trace_file += '/pipeline_info'
-                for file in os.listdir(execution_trace_file):
-                    if file.startswith('execution_trace'):
-                        execution_trace_file += '/{}'.format(file)
-                        break
-                if 'execution_trace' in execution_trace_file:
-                    break
-        time.sleep(60)
+        execution_trace_file = ''
+        pipeline_info_dir = '{}/results/pipeline_info'.format(analysis_path)
+        if os.path.exists(pipeline_info_dir):
+            for file in os.listdir(pipeline_info_dir):
+                execution_trace_file = os.path.join(pipeline_info_dir, file) if file.startswith('execution_trace') else ''
+                break
+        else:
+            time.sleep(60)
+            continue
+        if 'execution_trace' in execution_trace_file:
+            break
+        else:
+            pass
     step_pre = 0
     step_var = 0
     step_fusion = 0
@@ -107,7 +114,7 @@ def monitor_feedback(params_d:dict) -> None:
                         step_dict['error'] = 1
                         send_json_message(analysis_path, send_message_script, step_dict, step_file_name)
                         exit('errors in step_callvar')
-                if is_fusion and (step_fusion == 0):
+                if is_sv and (step_fusion == 0):
                     if 'TIDDIT_SV' in line:
                         step_dict['startDate'] = line.split('\t')[6][:-4]
                         step_dict['analysisStatus'] = 'SV检测'

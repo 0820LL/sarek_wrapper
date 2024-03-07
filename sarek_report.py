@@ -3,18 +3,34 @@
 
 import os
 from sarek_funcs import send_json_message
+from sarek_funcs import compress_results
 
 
 def make_send_report(params_d:dict) -> None:
-    analysis_path       = params_d['analysis_path']
-    send_message_script = params_d['send_message_script']
-    sample_name_l       = params_d['sample_name_l']
-    sample_type_l       = params_d['sample_type_l']
-    is_mutation         = params_d['is_mutation']
-    is_fusion           = params_d['is_fusion']
-    is_cnv              = params_d['is_cnv']
-    pipeline_name       = params_d['pipeline_name']
-    report_dict         = {
+    analysis_path        = params_d['analysis_path']
+    send_message_script  = params_d['send_message_script']
+    is_mutation          = params_d['is_mutation']
+    is_sv                = params_d['is_sv']
+    is_cnv               = params_d['is_cnv']
+    variant_calling_mode = params_d['variant_calling_mode']
+    tumor_name           = params_d['tumor_name']
+    normal_name          = params_d['normal_name']
+    pipeline_name        = params_d['pipeline_name']
+    
+    # to organize the files to download
+    multiqc_report = '{}/results/multiqc/multiqc_report.html'.format(analysis_path)
+    pipeline_info_dir = '{}/results/pipeline_info'.format(analysis_path)
+    execution_report = ''
+    for filename in os.listdir(pipeline_info_dir):
+        execution_report = os.path.join(pipeline_info_dir, filename) if filename.startswith('execution_report') else ''
+    intermediate_files_list = []
+    intermediate_files_list.append('{}/results/variant_calling'.format(analysis_path))
+    intermediate_files_list.append('{}/results/annotation'.format(analysis_path))
+    intermediate_files_list.append('{}/results/reports'.format(analysis_path))
+    intermediate_files_zip = '{}/intermediate_files.zip'.format(analysis_path)
+    compress_results(intermediate_files_list, intermediate_files_zip)
+
+    report_dict          = {
         'status'          : 'Pass',
         'pipelineName'    : pipeline_name,
         'taskId'          : params_d['task_id'],
@@ -192,11 +208,16 @@ def make_send_report(params_d:dict) -> None:
         }
         report_dict['data'].append(report_mutation_dict)
     if is_cnv:
-        sort_num           = len(report_dict['data']) + 1
-        tumor_index        = sample_type_l.index('tumor')
-        normal_index       = sample_type_l.index('normal')
-        tumor_vs_normal    = '{}_vs_{}'.format(sample_name_l[tumor_index], sample_name_l[normal_index])
-        cnvkit_result_file = '{0}/results/variant_calling/cnvkit/{1}/{2}-scatter.png'.format(analysis_path, tumor_vs_normal, sample_name_l[tumor_index])
+        sort_num = len(report_dict['data']) + 1
+        if variant_calling_mode == 'somatic':
+            cnv_file_name = '{}_vs_{}'.format(tumor_name, normal_name)
+            cnvkit_result_file = '{0}/results/variant_calling/cnvkit/{1}/{2}-scatter.png'.format(analysis_path, cnv_file_name, tumor_name)
+        elif variant_calling_mode == 'germline':
+            cnvkit_result_file = '{0}/results/variant_calling/cnvkit/{1}/{2}-scatter.png'.format(analysis_path, normal_name, normal_name)
+        elif variant_calling_mode == 'tumor_only':
+            cnvkit_result_file = '{0}/results/variant_calling/cnvkit/{1}/{2}-scatter.png'.format(analysis_path, tumor_name, tumor_name)
+        else:
+            pass
         report_cnv_dict = {
             'sort' : sort_num,
             'title': 'CNV检测',
@@ -224,7 +245,7 @@ def make_send_report(params_d:dict) -> None:
             'subtitle2': ''
         }
         report_dict['data'].append(report_cnv_dict)
-    if is_fusion:
+    if is_sv:
         report_sv_dict = {
         # there is no picture to display
         }
@@ -352,13 +373,29 @@ def make_send_report(params_d:dict) -> None:
     sort_num = len(report_dict['data']) + 1
     report_download_dict = {
         'sort' : sort_num,
-        'title': '结果下载',
+        'title': '结果文件下载',
         'text' : [
             {
                 'sort'   : 1,
-                'title'  : '分析报告下载',
-                'content': '分析报告下载：#&{}/results2download.zip'.format(analysis_path),
-                'postDes': '详细的分析分析结果请下载并解压查看',
+                'title'  : 'MultiQC报告下载',
+                'content': 'MultiQC下载：#&{}'.format(multiqc_report),
+                'postDes': '详细的分析结果请下载并查看',
+                'memo'   : '',
+                'preDes' : ''
+            },
+            {
+                'sort'   : 2,
+                'title'  : 'pipeline运行报告下载',
+                'content': 'pipelines运行报告下载：#&{}'.format(execution_report),
+                'postDes': '详细的分析分析结果请下载并查看',
+                'memo'   : '',
+                'preDes' : ''
+            },
+            {
+                'sort'   : 3,
+                'title'  : '分析过程中间文件下载',
+                'content': '分析过程中间文件下载：#&{}'.format(intermediate_files_zip),
+                'postDes': '详细的分析结果请下载查看',
                 'memo'   : '',
                 'preDes' : ''
             }

@@ -171,7 +171,7 @@ def write_qc_table(task_id: int, analysis_record_id: int, sample_name_l: list, a
     return qc_table_file
 
 
-def write_variants_table(task_id: int, analysis_record_id: int, sample_name_l: list, sample_id_l: list, sample_type_l: list, genome_version: str, analysis_path: str) -> str:
+def write_variants_table(task_id: int, analysis_record_id: int, tumor_name: str, normal_name: str, genome_version: str, analysis_path: str) -> str:
     '''
     extract variants data from the mutect2 results: tumor_vs_normal
 
@@ -184,10 +184,7 @@ def write_variants_table(task_id: int, analysis_record_id: int, sample_name_l: l
         genome_version (str)    : _description_
         analysis_path (str)     : _description_
     '''
-    tumor_index           = sample_type_l.index('tumor')
-    normal_index          = sample_type_l.index('normal')
-    tumor_vs_normal       = '{}_vs_{}'.format(sample_name_l[tumor_index], sample_name_l[normal_index])
-    tumor_id_vs_normal_id = '{}_vs_{}'.format(sample_id_l[tumor_index], sample_id_l[normal_index])
+    tumor_vs_normal       = '{}_vs_{}'.format(tumor_name, normal_name)
     mutect2_result_file   = '{0}/results/annotation/mutect2/{1}/{1}.mutect2.filtered_snpEff.ann.vcf.gz'.format(analysis_path, tumor_vs_normal)
     mutect2_result_l      = []
     with gzip.open(mutect2_result_file, 'rt') as mutect2_result_f:
@@ -242,7 +239,7 @@ def write_variants_table(task_id: int, analysis_record_id: int, sample_name_l: l
         table_content        += str(task_id) + '\t'  # taskId
         table_content        += str(analysis_record_id) + '\t'  # analysisRecordId
         table_content        += tumor_vs_normal + '\t'  # sampleName
-        table_content        += tumor_id_vs_normal_id + '\t'  # sampleId
+        table_content        += 'NA\t'  # sampleId
         if mutect2_info_split[0]:
             table_content += mutect2_result_split[0] + '\t'  # chromosome
         else:
@@ -317,7 +314,7 @@ def write_variants_table(task_id: int, analysis_record_id: int, sample_name_l: l
     return variants_table_file
 
 
-def write_cnv_table(task_id: int, analysis_record_id: int, sample_name_l: list, sample_id_l: list, sample_type_l: list, genome_version: str, analysis_path: str) -> str:
+def write_cnv_table(task_id: int, analysis_record_id: int, tumor_name:str, normal_name:str, genome_version: str, analysis_path: str) -> str:
     '''
     extract cnv data from the cnvkit results: tumor_vs_normal
 
@@ -330,14 +327,9 @@ def write_cnv_table(task_id: int, analysis_record_id: int, sample_name_l: list, 
         genome_version (str)    : _description_
         analysis_path (str)     : _description_
     '''
-    tumor_index = sample_type_l.index('tumor')
-    normal_index = sample_type_l.index('normal')
-    tumor_vs_normal = '{}_vs_{}'.format(
-        sample_name_l[tumor_index], sample_name_l[normal_index])
-    tumor_id_vs_normal_id = '{}_vs_{}'.format(
-        sample_id_l[tumor_index], sample_id_l[normal_index])
+    tumor_vs_normal = '{}_vs_{}'.format(tumor_name, normal_name)
     cnvkit_result_file = '{0}/results/variant_calling/cnvkit/{1}/{2}.call.cns'.format(
-        analysis_path, tumor_vs_normal, sample_name_l[tumor_index])
+        analysis_path, tumor_vs_normal, tumor_name)
     cnvkit_result_l = []
     with open(cnvkit_result_file, 'rt') as cnvkit_result_f:
         for line in cnvkit_result_f:
@@ -366,7 +358,7 @@ def write_cnv_table(task_id: int, analysis_record_id: int, sample_name_l: list, 
         table_content       += str(task_id) + '\t'  # taskId
         table_content       += str(analysis_record_id) + '\t'  # analysisRecordId
         table_content       += tumor_vs_normal + '\t'  # sampleName
-        table_content       += tumor_id_vs_normal_id + '\t'  # sampleId
+        table_content       += 'NA\t'  # sampleId
         table_content       += cnvkit_result_split[0] + '\t'  # chromosome
         table_content       += cnvkit_result_split[5] + '\t'  # copyNumber
         gene_name            = cnvkit_result_split[3]
@@ -438,18 +430,18 @@ def main2(analysis_path: str, config_file_path: str) -> None:
 
 
 def make_send_result_file(params_d: dict) -> None:
-    task_id             = params_d['task_id']
-    analysis_record_id  = params_d['analysis_record_id']
-    analysis_path       = params_d['analysis_path']
-    is_mutation         = params_d['is_mutation']
-    is_cnv              = params_d['is_cnv']
-    sample_id_l         = params_d['sample_id_l']
-    sample_name_l       = params_d['sample_name_l']
-    sample_type_l       = params_d['sample_type_l']
-    genome_version      = params_d['genome_version']
-    send_message_script = params_d['send_message_script']
-    pipeline_name       = params_d['pipeline_name']
-    result_dict = {
+    task_id              = params_d['task_id']
+    analysis_record_id   = params_d['analysis_record_id']
+    analysis_path        = params_d['analysis_path']
+    is_mutation          = params_d['is_mutation']
+    is_cnv               = params_d['is_cnv']
+    variant_calling_mode = params_d['variant_calling_mode']
+    tumor_name           = params_d['tumor_name']
+    normal_name          = params_d['normal_name']
+    genome_version       = params_d['genome_version']
+    send_message_script  = params_d['send_message_script']
+    pipeline_name        = params_d['pipeline_name']
+    result_dict          = {
         'status'          : 'Pass',
         'pipelineName'    : pipeline_name,
         'taskId'          : task_id,
@@ -463,13 +455,14 @@ def make_send_result_file(params_d: dict) -> None:
         'as_table'        : None,
         'de_table'        : None
     }
+    sample_name_l = [tumor_name, normal_name]
     qc_table_file           = write_qc_table(task_id, analysis_record_id, sample_name_l, analysis_path)
     result_dict['qc_table'] = qc_table_file
-    if is_mutation:
-        variants_table_file          = write_variants_table(task_id, analysis_record_id, sample_name_l, sample_id_l, sample_type_l, genome_version, analysis_path)
+    if is_mutation and (variant_calling_mode == 'somatic'):
+        variants_table_file          = write_variants_table(task_id, analysis_record_id, tumor_name, normal_name, genome_version, analysis_path)
         result_dict['variant_table'] = variants_table_file
-    if is_cnv:
-        cnv_table_file           = write_cnv_table(task_id, analysis_record_id, sample_name_l, sample_id_l, sample_type_l, genome_version, analysis_path)
+    if is_cnv and (variant_calling_mode == 'somatic'):
+        cnv_table_file           = write_cnv_table(task_id, analysis_record_id, tumor_name, normal_name, genome_version, analysis_path)
         result_dict['cnv_table'] = cnv_table_file
     send_json_message(analysis_path, send_message_script, result_dict, 'Results.json')
 
